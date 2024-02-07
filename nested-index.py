@@ -2,6 +2,7 @@ import csv
 from collections import defaultdict, Counter
 import json
 def build_nested_inverted_index(csv_file_path):
+    freq_list = []
     # Read the CSV file and collect all values for each feature
     with open(csv_file_path, mode='r', encoding='utf-8') as file:
         reader = csv.DictReader(file)
@@ -17,7 +18,7 @@ def build_nested_inverted_index(csv_file_path):
     features_sorted_by_frequency = sorted(feature_frequencies.items(), key=lambda x: x[1].most_common(1)[0][1], reverse=True)
     for i in range(0,7):
 
-        print(features_sorted_by_frequency[i][0])
+        print(freq_list.append(features_sorted_by_frequency[i][0]))
     # Initialize the nested inverted index
     nested_index = {}
     
@@ -43,10 +44,10 @@ def build_nested_inverted_index(csv_file_path):
         for row in reader:
             add_to_index(nested_index, features_sorted_by_frequency, row)
     
-    return nested_index
+    return nested_index, freq_list
 
 # Example usage
 csv_file_path = 'catalog.csv'
-nested_inverted_index = build_nested_inverted_index(csv_file_path)
+nested_inverted_index, freq_list = build_nested_inverted_index(csv_file_path)
 with open('inverted.json', 'w') as f:
     json.dump(nested_inverted_index, f)
