@@ -5,7 +5,11 @@ from collections import defaultdict, Counter
 import json
 import logging 
 import numpy as np
+import logging
+import sys
 
+import pandas as pd
+from llama_index.query_engine import PandasQueryEngine
 
 
 
@@ -154,66 +158,93 @@ def filter_by_attributes_with_numerical_conditions(nested_index, query, freq_lis
 # Streamlit App
 def main():
     st.title("Catalog INDEXING !!")
+    tab1, tab2 = st.tabs(["Catalog Indexing", "CSV Operations"])
    
+    with tab1:
+        # Button to create DataFrame
+        if 'data_generated' not in st.session_state or st.session_state['data_generated'] == False:
+            st.session_state['data_generated'] = True
+            prepare_dataframe()
+            csv_file_path = 'catalog.csv'
+            nested_inverted_index, freq_list = build_nested_inverted_index(csv_file_path)
+            with open('inverted.json', 'w') as f:
+                json.dump(nested_inverted_index, f)
+            st.success("Inverted Index created and saved as 'inverted.json'")
 
-    # Button to create DataFrame
-    if 'data_generated' not in st.session_state or st.session_state['data_generated'] == False:
-        st.session_state['data_generated'] = True
-        prepare_dataframe()
-        csv_file_path = 'catalog.csv'
-        nested_inverted_index, freq_list = build_nested_inverted_index(csv_file_path)
-        with open('inverted.json', 'w') as f:
-            json.dump(nested_inverted_index, f)
-        st.success("Inverted Index created and saved as 'inverted.json'")
+        inverted_index = {}
+        with open('inverted.json', 'r') as f:
+            inverted_index = json.load(f)
 
-    inverted_index = {}
-    with open('inverted.json', 'r') as f:
-       inverted_index = json.load(f)
+        # Define filter options
+        filter_options = {
+            'Availability': sorted(['In Stock', 'Out of Stock', 'Backorder']),
+            'Category': sorted(['Electronics', 'Home & Kitchen', 'Fashion', 'Beauty & Personal Care', 'Toys & Games']),
+            'Rating': ['Below', 'Above'],
+            'ReleaseYear': ['Below', 'Above']
+        }
 
-    # Define filter options
-    filter_options = {
-        'Availability': sorted(['In Stock', 'Out of Stock', 'Backorder']),
-        'Category': sorted(['Electronics', 'Home & Kitchen', 'Fashion', 'Beauty & Personal Care', 'Toys & Games']),
-        'Rating': ['Below', 'Above'],
-        'ReleaseYear': ['Below', 'Above']
-    }
-
-    # Sidebar for filters
-    st.sidebar.title("Filters")
-    filters = {}
-    for key, values in filter_options.items():
-        if key == 'Rating':
-            condition = st.sidebar.selectbox(f"Select condition for {key}", ['Below', 'Above'])
-            if condition:
-                value = st.sidebar.number_input(f"Enter value for {key}")
-                filters[key] = {'condition': condition, 'value': value}
-        elif key == 'ReleaseYear':
-            condition = st.sidebar.selectbox(f"Select condition for {key}", ['Below', 'Above'])
-            if condition:
-                value = st.sidebar.number_input(f"Enter value for {key}", step=1)
-                filters[key] = {'condition': condition, 'value': value}
-        else:
-            value = st.sidebar.selectbox(f"Select {key}", values)
-            filters[key] = value
-
-    # Apply button
-    if st.sidebar.button("Apply Filters"):
-        with st.spinner("Applying Filters..."):
-            freq_list = ['Availability', 'Category', 'ReleaseYear', 'Rating', 'ProductName' , 'Price ProductID']
-            filtered_rows = apply_filters(filters, inverted_index, freq_list)
-            if len(filtered_rows) == 0:
-                st.warning("No data found")
+        # Sidebar for filters
+        st.sidebar.title("Filters")
+        filters = {}
+        for key, values in filter_options.items():
+            if key == 'Rating':
+                condition = st.sidebar.selectbox(f"Select condition for {key}", ['Below', 'Above'])
+                if condition:
+                    value = st.sidebar.number_input(f"Enter value for {key}")
+                    filters[key] = {'condition': condition, 'value': value}
+            elif key == 'ReleaseYear':
+                condition = st.sidebar.selectbox(f"Select condition for {key}", ['Below', 'Above'])
+                if condition:
+                    value = st.sidebar.number_input(f"Enter value for {key}", step=1)
+                    filters[key] = {'condition': condition, 'value': value}
             else:
-                st.success("Filters Applied Successfully!")
-                # Read the original CSV file
-                original_df = pd.read_csv('catalog.csv')
-                # Fetch all data of filtered indexes
-                filtered_df = original_df.iloc[filtered_rows]
-                # Sort the data according to the index
-                filtered_df = filtered_df.sort_index()
-                # Display the DataFrame with horizontal and vertical scroll options
-                st.dataframe(filtered_df.style.set_properties(**{'max-width': '1000px', 'overflow-x': 'auto', 'overflow-y': 'auto'}))
+                value = st.sidebar.selectbox(f"Select {key}", values)
+                filters[key] = value
+
+        # Apply button
+        if st.sidebar.button("Apply Filters"):
+            with st.spinner("Applying Filters..."):
+                freq_list = ['Availability', 'Category', 'ReleaseYear', 'Rating', 'ProductName' , 'Price ProductID']
+                filtered_rows = apply_filters(filters, inverted_index, freq_list)
+                if len(filtered_rows) == 0:
+                    st.warning("No data found")
+                else:
+                    st.success("Filters Applied Successfully!")
+                    # Read the original CSV file
+                    original_df = pd.read_csv('catalog.csv')
+                    # Fetch all data of filtered indexes
+                    filtered_df = original_df.iloc[filtered_rows]
+                    # Sort the data according to the index
+                    filtered_df = filtered_df.sort_index()
+                    # Display the DataFrame with horizontal and vertical scroll options
+                    st.dataframe(filtered_df.style.set_properties(**{'max-width': '1000px', 'overflow-x': 'auto', 'overflow-y': 'auto'}))
+
+    with tab2:
+        st.subheader("Upload CSV and Execute Pandas Commands")
+        # File uploader
+        uploaded_file = st.file_uploader("Choose a CSV file", type='csv')
+        if uploaded_file is not None:
+            # Read the uploaded CSV file
+            df = pd.read_csv(uploaded_file)
+            st.write("CSV File Uploaded Successfully!")
+
+            # Pandas Command Execution
+            try:
+                pandas_command = st.text_area("Write your Query here.....", height=150)
+                if st.button("Execute Command"):
+                    if pandas_command:
+                        query_engine = PandasQueryEngine(df=df, verbose=True)
+                        response = query_engine.query(
+                            pandas_command,
+                        )
+                        st.write("Command Executed Successfully. See the results below:")
+                        st.write(response.response)
+                    else:
+                        st.error("Please enter a valid command to execute.")
+            except Exception as e:
+                st.error(f"Error executing command: {e}")
 
 
 if __name__ == "__main__":
+
     main()
