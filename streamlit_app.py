@@ -206,6 +206,7 @@ def main():
             with st.spinner("Applying Filters..."):
                 freq_list = ['Availability', 'Category', 'ReleaseYear', 'Rating', 'ProductName' , 'Price ProductID']
                 filtered_rows = apply_filters(filters, inverted_index, freq_list)
+                filtered_rows = [int(row)-1 for row in filtered_rows]
                 if len(filtered_rows) == 0:
                     st.warning("No data found")
                 else:
